@@ -233,6 +233,59 @@ describe("acknowledged steering action", () => {
 		}
 	});
 
+	it("names the terminal state and the resume path when steering a completed run", async () => {
+		const runId = `steer-terminal-${Date.now().toString(36)}`;
+		const asyncDir = path.join(ASYNC_DIR, runId);
+		writeStatus(asyncDir, { ...runningStatus(runId), state: "complete", endedAt: Date.now() });
+		try {
+			const result = await steerAsyncRun({ state: createState(), runId, message: "too late", location: { asyncDir } });
+			assert.equal(result.isError, true);
+			assert.match(result.content[0]!.text, /is complete and cannot be steered/);
+			assert.match(result.content[0]!.text, /steering requires state "running" or "queued"/);
+			assert.match(result.content[0]!.text, /action "resume"/);
+		} finally {
+			removeAsyncDir(asyncDir);
+		}
+	});
+
+	it("points a default steer on a completed retained child at mode follow_up", async () => {
+		const runId = `steer-terminal-retained-${Date.now().toString(36)}`;
+		const asyncDir = path.join(ASYNC_DIR, runId);
+		const sessionFile = path.join(asyncDir, "child.jsonl");
+		fs.mkdirSync(asyncDir, { recursive: true });
+		fs.writeFileSync(sessionFile, "", "utf-8");
+		writeStatus(asyncDir, {
+			...runningStatus(runId),
+			state: "complete",
+			parentWorkflowRunId: "workflow",
+			endedAt: Date.now(),
+			sessionFile,
+			steps: [{ agent: "worker-0", status: "complete", sessionFile }],
+		});
+		try {
+			const result = await steerAsyncRun({ state: createState(), runId, message: "too late", location: { asyncDir } });
+			assert.equal(result.isError, true);
+			assert.match(result.content[0]!.text, /mode "follow_up"/);
+			assert.match(result.content[0]!.text, /action "resume"/);
+		} finally {
+			removeAsyncDir(asyncDir);
+		}
+	});
+
+	it("explains why mode follow_up was rejected for a non-retained completed run", async () => {
+		const runId = `steer-terminal-followup-${Date.now().toString(36)}`;
+		const asyncDir = path.join(ASYNC_DIR, runId);
+		writeStatus(asyncDir, { ...runningStatus(runId), state: "complete", endedAt: Date.now() });
+		try {
+			const result = await steerAsyncRun({ state: createState(), runId, message: "too late", mode: "follow_up", location: { asyncDir } });
+			assert.equal(result.isError, true);
+			assert.match(result.content[0]!.text, /mode "follow_up" requires a completed single-child workflow run/);
+			assert.match(result.content[0]!.text, /action "resume"/);
+		} finally {
+			removeAsyncDir(asyncDir);
+		}
+	});
+
 	it("does not commit recovery when the caller aborts the acknowledgment wait", async () => {
 		const runId = `steer-abort-${Date.now().toString(36)}`;
 		const asyncDir = path.join(ASYNC_DIR, runId);

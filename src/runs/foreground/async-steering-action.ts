@@ -86,10 +86,18 @@ export async function steerAsyncRun(input: {
 	}
 	const steps = status.steps ?? [];
 	if (status.state !== "running" && status.state !== "queued") {
-		const retained = input.mode === "follow_up" && canQueueRetainedAsyncFollowUp(status, input.index);
+		const followUpEligible = canQueueRetainedAsyncFollowUp(status, input.index);
+		const retained = input.mode === "follow_up" && followUpEligible;
 		if (!retained) {
+			// Name the terminal state and the next action so a steer that lost a race with
+			// completion does not look like a missing run. Mirrors the sibling nested/workflow errors.
+			const hint = followUpEligible
+				? `Queue this message for its next resume with mode "follow_up", or continue the run now with action "resume".`
+				: input.mode === "follow_up"
+					? `mode "follow_up" requires a completed single-child workflow run with a persisted session. Continue it with action "resume", or read its saved result.`
+					: `Continue it with action "resume", or read its saved result.`;
 			return {
-				content: [{ type: "text", text: `Async run '${input.runId}' is not running or queued and cannot be steered.` }],
+				content: [{ type: "text", text: `Async run '${input.runId}' is ${status.state} and cannot be steered; steering requires state "running" or "queued". ${hint}` }],
 				isError: true,
 				details: { mode: "management", results: [] },
 			};
