@@ -253,12 +253,12 @@ describe("acknowledged steering action", () => {
 
 	it("names why resume is unavailable instead of offering it", async () => {
 		for (const [label, status, reason] of [
-			["stopped", { state: "stopped" }, /was stopped and cannot be resumed\. Start a new run instead/],
-			["no session", { state: "complete" }, /does not have a persisted session file to resume from/],
+			["stopped", { ...runningStatus("stopped"), state: "stopped" }, /was stopped and cannot be resumed\. Start a new run instead/],
+			["several children", { ...runningStatus("several", "parallel", 2), state: "partial" }, /has 2 children\. Provide index to choose one/],
 		] as const) {
 			const runId = `steer-unresumable-${label.replace(" ", "-")}-${Date.now().toString(36)}`;
 			const asyncDir = path.join(ASYNC_DIR, runId);
-			writeStatus(asyncDir, { ...runningStatus(runId), ...status, endedAt: Date.now() });
+			writeStatus(asyncDir, { ...status, runId, endedAt: Date.now() });
 			try {
 				const result = await steerAsyncRun({ state: createState(), runId, message: "too late", location: { asyncDir } });
 				assert.equal(result.isError, true, label);
@@ -304,7 +304,8 @@ describe("acknowledged steering action", () => {
 			const result = await steerAsyncRun({ state: createState(), runId, message: "too late", mode: "follow_up", location: { asyncDir } });
 			assert.equal(result.isError, true);
 			assert.match(result.content[0]!.text, /mode "follow_up" requires a completed single-child workflow run/);
-			assert.match(result.content[0]!.text, /action "resume" is not available either/);
+			// Resume revives a completed run without a saved session, so it is still offered.
+			assert.match(result.content[0]!.text, /Continue it with action "resume"/);
 		} finally {
 			removeAsyncDir(asyncDir);
 		}
