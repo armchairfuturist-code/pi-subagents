@@ -91,10 +91,13 @@ export async function steerAsyncRun(input: {
 		if (!retained) {
 			// Name the terminal state and the next action so a steer that lost a race with
 			// completion does not look like a missing run. Mirrors the sibling nested/workflow errors.
-			// Resume rejects stopped runs, so they get the start-new-run advice instead.
-			const resumeHint = status.state === "stopped"
-				? `A stopped run cannot be resumed; read its saved result or start a new run.`
-				: `Continue it with action "resume", or read its saved result.`;
+			// Offer resume only when resume's own checks accept the run, and otherwise say why not.
+			let resumeHint = `Continue it with action "resume", or read its saved result.`;
+			try {
+				resolveAsyncResumeTarget({ dir: asyncDir, index: input.index }, { kill: input.kill }, { sessionId: input.state.currentSessionId ?? undefined });
+			} catch (error) {
+				resumeHint = `action "resume" is not available either: ${error instanceof Error ? error.message : String(error)}`;
+			}
 			const hint = followUpEligible
 				? `Queue this message for its next resume with mode "follow_up", or continue the run now with action "resume".`
 				: input.mode === "follow_up"

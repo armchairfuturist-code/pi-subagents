@@ -236,30 +236,39 @@ describe("acknowledged steering action", () => {
 	it("names the terminal state and the resume path when steering a completed run", async () => {
 		const runId = `steer-terminal-${Date.now().toString(36)}`;
 		const asyncDir = path.join(ASYNC_DIR, runId);
-		writeStatus(asyncDir, { ...runningStatus(runId), state: "complete", endedAt: Date.now() });
+		const sessionFile = path.join(asyncDir, "child.jsonl");
+		fs.mkdirSync(asyncDir, { recursive: true });
+		fs.writeFileSync(sessionFile, "", "utf-8");
+		writeStatus(asyncDir, { ...runningStatus(runId), state: "complete", endedAt: Date.now(), sessionFile, steps: [{ agent: "worker-0", status: "complete", sessionFile }] });
 		try {
 			const result = await steerAsyncRun({ state: createState(), runId, message: "too late", location: { asyncDir } });
 			assert.equal(result.isError, true);
 			assert.match(result.content[0]!.text, /is complete and cannot be steered/);
 			assert.match(result.content[0]!.text, /steering requires state "running" or "queued"/);
-			assert.match(result.content[0]!.text, /action "resume"/);
+			assert.match(result.content[0]!.text, /Continue it with action "resume"/);
 		} finally {
 			removeAsyncDir(asyncDir);
 		}
 	});
 
-	it("does not point a stopped run at resume", async () => {
-		const runId = `steer-stopped-${Date.now().toString(36)}`;
-		const asyncDir = path.join(ASYNC_DIR, runId);
-		writeStatus(asyncDir, { ...runningStatus(runId), state: "stopped", endedAt: Date.now() });
-		try {
-			const result = await steerAsyncRun({ state: createState(), runId, message: "too late", location: { asyncDir } });
-			assert.equal(result.isError, true);
-			assert.match(result.content[0]!.text, /is stopped and cannot be steered/);
-			assert.match(result.content[0]!.text, /start a new run/);
-			assert.doesNotMatch(result.content[0]!.text, /action "resume"/);
-		} finally {
-			removeAsyncDir(asyncDir);
+	it("names why resume is unavailable instead of offering it", async () => {
+		for (const [label, status, reason] of [
+			["stopped", { state: "stopped" }, /was stopped and cannot be resumed\. Start a new run instead/],
+			["no session", { state: "complete" }, /does not have a persisted session file to resume from/],
+		] as const) {
+			const runId = `steer-unresumable-${label.replace(" ", "-")}-${Date.now().toString(36)}`;
+			const asyncDir = path.join(ASYNC_DIR, runId);
+			writeStatus(asyncDir, { ...runningStatus(runId), ...status, endedAt: Date.now() });
+			try {
+				const result = await steerAsyncRun({ state: createState(), runId, message: "too late", location: { asyncDir } });
+				assert.equal(result.isError, true, label);
+				assert.match(result.content[0]!.text, new RegExp(`is ${status.state} and cannot be steered`), label);
+				assert.match(result.content[0]!.text, /action "resume" is not available either/, label);
+				assert.match(result.content[0]!.text, reason, label);
+				assert.doesNotMatch(result.content[0]!.text, /Continue it with action "resume"/, label);
+			} finally {
+				removeAsyncDir(asyncDir);
+			}
 		}
 	});
 
@@ -295,7 +304,7 @@ describe("acknowledged steering action", () => {
 			const result = await steerAsyncRun({ state: createState(), runId, message: "too late", mode: "follow_up", location: { asyncDir } });
 			assert.equal(result.isError, true);
 			assert.match(result.content[0]!.text, /mode "follow_up" requires a completed single-child workflow run/);
-			assert.match(result.content[0]!.text, /action "resume"/);
+			assert.match(result.content[0]!.text, /action "resume" is not available either/);
 		} finally {
 			removeAsyncDir(asyncDir);
 		}
