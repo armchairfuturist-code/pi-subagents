@@ -248,6 +248,21 @@ describe("acknowledged steering action", () => {
 		}
 	});
 
+	it("does not point a stopped run at resume", async () => {
+		const runId = `steer-stopped-${Date.now().toString(36)}`;
+		const asyncDir = path.join(ASYNC_DIR, runId);
+		writeStatus(asyncDir, { ...runningStatus(runId), state: "stopped", endedAt: Date.now() });
+		try {
+			const result = await steerAsyncRun({ state: createState(), runId, message: "too late", location: { asyncDir } });
+			assert.equal(result.isError, true);
+			assert.match(result.content[0]!.text, /is stopped and cannot be steered/);
+			assert.match(result.content[0]!.text, /start a new run/);
+			assert.doesNotMatch(result.content[0]!.text, /action "resume"/);
+		} finally {
+			removeAsyncDir(asyncDir);
+		}
+	});
+
 	it("points a default steer on a completed retained child at mode follow_up", async () => {
 		const runId = `steer-terminal-retained-${Date.now().toString(36)}`;
 		const asyncDir = path.join(ASYNC_DIR, runId);

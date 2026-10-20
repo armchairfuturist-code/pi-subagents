@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- `steer` on a terminal async run now names the run's state and the path forward instead of only saying it "is not running or queued". A completed retained child points at `resume`, or `mode: "follow_up"` to queue the message for its next resume, and an ineligible `follow_up` explains the completed single-child workflow requirement. Message-only: steering still fails closed on a terminal run. ([#2954](https://github.com/nicobailon/pi-subagents/issues/2954))
+- `steer` on a terminal async run now names the run's state and the path forward instead of only saying it "is not running or queued". A completed retained child points at `resume`, or `mode: "follow_up"` to queue the message for its next resume, a stopped run is told to start a new run, and an ineligible `follow_up` explains the completed single-child workflow requirement. Message-only: steering still fails closed on a terminal run. Thanks to [@armchairfuturist-code](https://github.com/armchairfuturist-code) for [#2955](https://github.com/nicobailon/pi-subagents/pull/2955) ([#2954](https://github.com/nicobailon/pi-subagents/issues/2954)).
 
 ## [0.79.1] - 2026-10-17
 

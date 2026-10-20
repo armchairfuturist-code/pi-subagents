@@ -91,11 +91,15 @@ export async function steerAsyncRun(input: {
 		if (!retained) {
 			// Name the terminal state and the next action so a steer that lost a race with
 			// completion does not look like a missing run. Mirrors the sibling nested/workflow errors.
+			// Resume rejects stopped runs, so they get the start-new-run advice instead.
+			const resumeHint = status.state === "stopped"
+				? `A stopped run cannot be resumed; read its saved result or start a new run.`
+				: `Continue it with action "resume", or read its saved result.`;
 			const hint = followUpEligible
 				? `Queue this message for its next resume with mode "follow_up", or continue the run now with action "resume".`
 				: input.mode === "follow_up"
-					? `mode "follow_up" requires a completed single-child workflow run with a persisted session. Continue it with action "resume", or read its saved result.`
-					: `Continue it with action "resume", or read its saved result.`;
+					? `mode "follow_up" requires a completed single-child workflow run with a persisted session. ${resumeHint}`
+					: resumeHint;
 			return {
 				content: [{ type: "text", text: `Async run '${input.runId}' is ${status.state} and cannot be steered; steering requires state "running" or "queued". ${hint}` }],
 				isError: true,
